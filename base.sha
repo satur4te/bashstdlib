@@ -1,0 +1,158 @@
+#!/usr/bin/bash --posix
+#  Base file for bash project
+#  ----------------------------------------------
+# Contains standard definitions, error and debug functionality
+###  Source guard
+if [[ -z "$GUARD_BASE" ]]; then
+	GUARD_BASE="set"
+else
+	return 0
+fi
+
+###  Include paths
+INCLUDE=$(cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
+###  Includes
+. "${INCLUDE}/install_utils.sha"
+
+### Base error codes
+E_SUCCESS=0
+E_FAILURE=255
+
+### Base output colors
+RED='\033[0;31m'
+CYAN='\033[1;36m'
+NC='\033[0m'
+
+###  Base functions (all other standard functions can depend on these ones)
+#  Function that checks input args on quantity and types
+#  Arguments: 
+#  	1. number of arguments, e.g N
+#  	2-N+1. types of args, that is s(string), n(number)
+#  Returns:
+#  	E_SUCCESS, if arguments suffice
+#  	E_FAIL, otherwise
+
+#  Helper function, that gets accurate outer function's caller name
+#  Globals:
+#  	OUTER_FUNCNAME
+#  Returns:
+#  	E_SUCCESS, always
+
+_GET_OUTER_FUNCNAME() {
+	if [[ "${FUNCNAME[2]}" == "main" ]]; then
+		OUTER_FUNCNAME=$(caller | awk '{print $2}' | grep -Eio "([^\/]*)$") 
+	else
+		OUTER_FUNCNAME="${FUNCNAME[2]}"
+	fi
+	return $E_SUCCESS
+}
+
+
+
+
+### ERROR PROCESSING ###
+###  Description
+#  Contains detailed error codes(TODO if needed) and advanced functions for error processing
+#  -------------------------------------------------------
+
+###  Prototypes
+#@ _E_PROCESS( VOID )
+
+###  Functions
+#  Processes last command's exit code ($?) TODO: consider making E a local variable (it's not used externally anyway)
+#  Globals:
+#  	E
+#  Arguments:
+#  	1. Exit message
+#  	2. Exit code(optional)
+#  Outputs:
+#  	Writes error messages to stderr, if there's one to write
+#  Returns:
+#  	E_SUCCESS, in case of success
+#  	*exits with the code supplied*, in case of error
+#	
+_E_PROCESS() {
+	local ret=$?
+	_GET_OUTER_FUNCNAME
+	if [[ -z ${2} ]]; then
+		E=$ret
+	else
+		E=$2
+	fi
+
+	if [[ ${E} -eq 0 ]]; then
+		return $E_SUCCESS
+	else
+		echo -e "${RED}`date  "+%H:%M:%S"` -- ERROR in "${OUTER_FUNCNAME} at line ${BASH_LINENO[0]}": ${1}, exit code ${E} ${NC}" >&2
+		exit $E 
+	fi
+}
+
+
+
+
+
+### DEBUG FUNCTIONALITY ###
+###  Description
+#  Contains global function for debug
+#  ----------------------------------
+
+###  Prototypes
+#@ _DEBUG_PRINT(string msg)
+
+###  Functions
+#  Writes debug message to stdout
+#  Globals:
+#  	NONE
+#  Arguments:
+#  	1. Debug message
+#  Outputs:
+#  	Writes debug message to stdout
+_DEBUG_PRINT() {
+	_GET_OUTER_FUNCNAME
+	echo -e "${CYAN}`date  "+%H:%M:%S"` -- ${OUTER_FUNCNAME} at line ${BASH_LINENO[0]}: ${1}${NC}"
+}
+
+### UTILS ###
+###  Description
+#  Contains useful defines and functions for all kinds of scripts
+#  --------------------------------------------------------------
+
+###  Prototypes
+#@ _CHECK_ROOT( VOID )
+#@ _EXIT(int exit_code)
+
+###  Functions
+#  Checks, if the script was started by root
+#  Globals:
+#  	EUID
+#  Returns:
+#  	E_SUCCESS, if root
+#  	E_FAILURE, otherwise
+
+_CHECK_ROOT()
+{
+	if [[ ${EUID} > 0 ]]; then
+		return $E_FAILURE
+	else
+		return $E_SUCCESS
+	fi
+}
+
+#  Exits the program with debug message
+#  Globals:
+#  	NONE
+#  Arguments:
+#  	1. Exit code
+#  Outputs:
+#  	Writes debug message to stdout
+_EXIT() {
+	if [[ ! "${1}" =~ ^[0-9]+$ ]]; then
+		_E_PROCESS "${1} is not a valid exit code, supposed to be numeric" $E_FAILURE
+	fi
+	_GET_OUTER_FUNCNAME
+	_DEBUG_PRINT "exiting the script in ${OUTER_FUNCNAME} at line ${BASH_LINENO[0]}, exit code ${1}\n\n"
+
+	exit ${1}
+}
