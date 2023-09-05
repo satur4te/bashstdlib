@@ -156,3 +156,82 @@ _EXIT() {
 
 	exit ${1}
 }
+
+CLEANUP_PRFX=_CLEANUP
+declare -a CLEANUP_STACK
+POP_ITEM=-1
+__STACK_TOP=-1
+
+
+#  Pushes function name onto cleanup stack
+#  Globals:
+#   CLEANUP_STACK
+#  Arguments:
+#   1. Function name
+#  Outputs:
+#   NONE
+_CLEANUP_STACK_PUSH() {
+    CLEANUP_STACK[++__STACK_TOP]=$1
+}
+
+
+#  Pushes function name onto cleanup stack
+#  Globals:
+#   CLEANUP_STACK
+#   POP_ITEM
+#  Arguments:
+#   NONE
+#  Outputs:
+#   Sets the $POP_ITEM variable with the value of the item taken from the stack
+#  Returns:
+#   E_FAILURE    if the stack is empty
+_CLEANUP_STACK_POP() {
+    if [[ $__STACK_TOP -eq -1 ]]; then
+        POP_ITEM=-1
+        return $E_FAILURE
+    fi
+
+    POP_ITEM=${CLEANUP_STACK[__STACK_TOP--]}
+    return $E_SUCCESS
+}
+
+
+#  Checks if the caller function has existing cleanup counterpart and if it does
+#  adds it into the cleanup stack
+#  Globals:
+#   OUTER_FUNCNAME
+#   CLEANUP_STACK
+#  Arguments:
+#   NONE
+#  Returns:
+#   E_SUCCESS    if the "*_CLEANUP" counterpart exists
+#   E_FAILURE    if it isn't
+_REGISTER_CLEANUP_HOOK() {
+    _GET_OUTER_FUNCNAME # sets the $OUTER_FUNCNAME name of caller function
+    CLEANUP_FUNCNAME="${OUTER_FUNCNAME}${CLEANUP_PRFX}"
+    if [[ -z $(type -t $CLEANUP_FUNCNAME) ]]; then
+        return $E_FAILURE
+    fi
+    _CLEANUP_STACK_PUSH $CLEANUP_FUNCNAME
+    return $E_SUCCESS
+}
+
+
+#  While stack isn't empty it will pop cleanup function from it and call it
+#  Globals:
+#   CLEANUP_STACK
+#  Arguments:
+#   NONE
+#  Outputs:
+#   NONE
+#  Returns:
+#   E_SUCCESS
+_PERFORM_CLEANUP() {
+    _CLEANUP_STACK_POP
+    while [ $? = $E_SUCCESS ];
+    do
+       $POP_ITEM # calling cleanup function
+       _CLEANUP_STACK_POP
+    done
+    return $E_SUCCESS
+}
